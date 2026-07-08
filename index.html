@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>こども はみがきタイマー</title>
+<!-- 院内・小児指導用 / v0.2（バージョン履歴はREADME参照） -->
+<style>
+  :root{
+    --bg1:#eafaff; --bg2:#d6f0fc;
+    --main:#2bb3c0; --main-dark:#1d8a95; --accent:#ff7d8a;
+    --lip:#ff8fa0; --lip-d:#f2677b; --inner:#c0546a; --gum:#ff9db0;
+    --tongue:#f98ba0; --tongue-mid:#ef6d88;
+    --text:#2a4a52; --ring-bg:#d6ecf2; --bubble:#fff7e8; --bubble-b:#ffd98a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  body{font-family:"Hiragino Maru Gothic ProN","Yu Gothic UI","Meiryo",sans-serif;
+    background:linear-gradient(160deg,var(--bg1),var(--bg2));color:var(--text);
+    min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px;overflow-x:hidden;}
+  .card{background:#fff;border-radius:30px;padding:22px 20px 26px;width:100%;max-width:440px;
+    box-shadow:0 18px 50px rgba(43,179,192,.22);text-align:center;position:relative;}
+
+  .clinic{position:absolute;top:12px;right:18px;max-width:52%;}
+  /* font-size:16px＝iOS Safariのフォーカス時オートズーム防止 */
+  .clinic input{font:inherit;font-size:16px;color:#7aa0a8;border:none;border-bottom:1px dashed #cfe6ec;
+    text-align:right;width:190px;max-width:100%;background:transparent;}
+  .clinic input::placeholder{color:#bcd3da;}
+  h1{font-size:1.5rem;color:var(--main-dark);margin-bottom:2px;}
+  .subtitle{font-size:.8rem;color:#7aa0a8;margin-bottom:12px;}
+
+  .ring-wrap{position:relative;width:264px;height:264px;margin:0 auto 4px;}
+  .ring-svg{transform:rotate(-90deg);}
+  .ring-bg{stroke:var(--ring-bg);}
+  .ring-fg{stroke:var(--main);stroke-linecap:round;}   /* ← 毎秒アニメを廃止（軽量化） */
+  .ring-center{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;}
+  #mouth{width:206px;height:auto;display:block;overflow:visible;}
+
+  .gumline{fill:none;stroke:var(--gum);stroke-width:12;stroke-linecap:round;}
+  .tooth{fill:#fff;stroke:#e6d6c0;stroke-width:1.1;transition:fill .25s;}
+  .tooth.on{fill:#bfeef4;stroke:var(--main-dark);}
+  /* 歯ブラシ（絵文字ではなく軽い図形）。移動だけアニメ */
+  #brush{transition:transform .4s cubic-bezier(.34,1.56,.64,1);pointer-events:none;}
+
+  .time{font-size:2.4rem;font-weight:800;color:var(--main-dark);letter-spacing:1px;margin-top:2px;}
+
+  /* 吹き出し（アドバイス） */
+  .bubble{position:relative;margin:8px auto 4px;max-width:340px;background:var(--bubble);
+    border:2px solid var(--bubble-b);border-radius:18px;padding:12px 16px 12px 52px;text-align:left;
+    min-height:74px;display:flex;align-items:center;box-shadow:0 4px 12px rgba(255,180,80,.18);}
+  .bubble::before{content:"🦷";position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:28px;}
+  .bubble::after{content:"";position:absolute;top:-9px;left:34px;width:16px;height:16px;
+    background:var(--bubble);border-left:2px solid var(--bubble-b);border-top:2px solid var(--bubble-b);
+    transform:rotate(45deg);}
+  .zone-name{font-size:1.15rem;font-weight:800;color:var(--main-dark);}
+  .zone-advice{font-size:.92rem;color:#8a6a3a;margin-top:1px;}
+
+  .dots{display:flex;justify-content:center;gap:8px;margin:14px 0 18px;flex-wrap:wrap;}
+  .dot{width:13px;height:13px;border-radius:50%;background:var(--ring-bg);transition:background .25s;}
+  .dot.active{background:var(--main);}
+  .dot.done{background:var(--gum);}
+
+  .buttons{display:flex;gap:12px;justify-content:center;}
+  button{font-family:inherit;font-size:1.1rem;font-weight:700;border:none;border-radius:16px;
+    padding:14px 10px;cursor:pointer;flex:1;touch-action:manipulation;}  /* 連打でのダブルタップ拡大を防止 */
+  button:active{transform:scale(.96);}
+  .btn-main{background:var(--main);color:#fff;box-shadow:0 6px 16px rgba(43,179,192,.35);}
+  .btn-main:hover{background:var(--main-dark);}
+  .btn-sub{background:#eef5f7;color:var(--main-dark);}
+  .btn-sub:hover{background:#e0eef1;}
+
+  .done-msg{font-size:1.2rem;font-weight:800;color:var(--accent);margin-top:14px;min-height:1.4em;}
+
+  .confetti{position:fixed;top:-10px;width:9px;height:14px;opacity:.9;animation:fall linear forwards;z-index:50;pointer-events:none;}
+  @keyframes fall{to{transform:translateY(105vh) rotate(540deg);opacity:0;}}
+  .footnote{font-size:.72rem;color:#9cc0c8;margin-top:14px;line-height:1.5;}
+
+  /* 狭い画面：医院名を通常フロー（右寄せ1行）にしてタイトルとの重なりを防ぐ */
+  @media (max-width:430px){
+    .clinic{position:static;max-width:100%;text-align:right;margin:0 0 4px;}
+    .clinic input{width:auto;max-width:100%;}
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="clinic"><input type="text" placeholder="医院名（任意）" aria-label="医院名"></div>
+    <h1>🪥 こども はみがきタイマー</h1>
+    <div class="subtitle">院内・指導用（2分を6エリアでご案内）</div>
+
+    <div class="ring-wrap">
+      <svg class="ring-svg" width="264" height="264" viewBox="0 0 264 264">
+        <circle class="ring-bg" cx="132" cy="132" r="120" fill="none" stroke-width="14"/>
+        <circle class="ring-fg" id="ring" cx="132" cy="132" r="120" fill="none" stroke-width="14"/>
+      </svg>
+      <div class="ring-center">
+        <svg id="mouth" viewBox="0 0 220 172" aria-label="あーんと開けたお口"></svg>
+      </div>
+    </div>
+
+    <div class="time" id="time">2:00</div>
+
+    <div class="bubble">
+      <div>
+        <div class="zone-name" id="zoneName">スタートを おしてね</div>
+        <div class="zone-advice" id="zoneAdvice">まえば・おくば・かむところ　みんな ぴかぴかに！</div>
+      </div>
+    </div>
+
+    <div class="dots" id="dots"></div>
+
+    <div class="buttons">
+      <button class="btn-main" id="startBtn">スタート</button>
+      <button class="btn-sub" id="resetBtn">リセット</button>
+    </div>
+
+    <div class="done-msg" id="doneMsg"></div>
+
+    <div class="footnote">入力内容は保存されません。お子さまがお使いの際は、保護者の方の見守りのもとでご使用ください。</div>
+  </div>
+
+<script>
+  // ── 6エリア × 20秒 = 2分（こども向けの言葉）──
+  const ZONES = [
+    { name:"みぎうえの おくば", advice:"ほっぺの がわを こちょこちょ〜" },
+    { name:"うえの まえば",     advice:"くるくる やさしく みがこう" },
+    { name:"ひだりうえの おくば",advice:"かむ ところも わすれずに！" },
+    { name:"ひだりしたの おくば",advice:"はぐきの さかいめを そっと" },
+    { name:"したの まえば",     advice:"うらがわも シャカシャカ" },
+    { name:"みぎしたの おくば",  advice:"さいごまで あと ちょっと！" },
+  ];
+  const SECONDS_PER_ZONE = 20;
+  const TOTAL = ZONES.length * SECONDS_PER_ZONE;
+
+  // ── お口の絵を生成 ──
+  const NS = "http://www.w3.org/2000/svg";
+  const mouth = document.getElementById("mouth");
+  const teeth = [];
+  const zoneCenter = {};
+  function el(tag, attrs){ const e=document.createElementNS(NS,tag); for(const k in attrs) e.setAttribute(k,attrs[k]); return e; }
+
+  mouth.appendChild(el("ellipse",{cx:110,cy:88,rx:104,ry:78,fill:"var(--lip)",stroke:"var(--lip-d)","stroke-width":3}));
+  mouth.appendChild(el("ellipse",{cx:110,cy:90,rx:90,ry:64,fill:"var(--inner)"}));
+  mouth.appendChild(el("ellipse",{cx:110,cy:126,rx:56,ry:32,fill:"var(--tongue)"}));
+  mouth.appendChild(el("path",{d:"M110 100 Q114 126 110 152",fill:"none",stroke:"var(--tongue-mid)","stroke-width":3,"stroke-linecap":"round",opacity:.7}));
+
+  function buildArch(cx, cy, rx, ry, aStart, aEnd, zoneOrder){
+    let d="", steps=40;
+    for(let s=0;s<=steps;s++){
+      const a=(aStart+(aEnd-aStart)*s/steps)*Math.PI/180;
+      d+=(s===0?"M":"L")+(cx+rx*Math.cos(a)).toFixed(1)+" "+(cy-ry*Math.sin(a)).toFixed(1)+" ";
+    }
+    mouth.appendChild(el("path",{d,class:"gumline"}));
+    const N=12;
+    for(let i=0;i<N;i++){
+      const a=(aStart+(aEnd-aStart)*(i+0.5)/N)*Math.PI/180;
+      const x=cx+rx*Math.cos(a), y=cy-ry*Math.sin(a);
+      const deg=Math.atan2(y-cy,x-cx)*180/Math.PI+90;
+      const front=1-Math.abs(i-(N-1)/2)/((N-1)/2);
+      const w=8.6+front*1.6, h=13+front*5;
+      const r=el("rect",{x:(x-w/2).toFixed(1),y:(y-h/2).toFixed(1),width:w.toFixed(1),height:h.toFixed(1),
+        rx:4,transform:`rotate(${deg.toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)})`,class:"tooth"});
+      const zone=zoneOrder[Math.floor(i/4)];
+      teeth.push({el:r,zone});
+      const zc=zoneCenter[zone]||(zoneCenter[zone]={sx:0,sy:0,n:0});
+      zc.sx+=x; zc.sy+=y; zc.n++;
+      mouth.appendChild(r);
+    }
+  }
+  buildArch(110, 68, 84, 46, 160, 20, [0,1,2]);   // 上の歯列
+  buildArch(110, 96, 76, 40, 200, 340, [5,4,3]);  // 下の歯列
+
+  // 歯ブラシ（手描きの軽い図形）。原点を先端（毛先）に置く
+  const brush = el("g",{id:"brush"});
+  brush.appendChild(el("rect",{x:-7,y:-3,width:14,height:6,rx:2.5,fill:"#fff",stroke:"var(--main-dark)","stroke-width":1.4})); // ヘッド
+  [-4.5,-1.5,1.5,4.5].forEach(bx=>brush.appendChild(el("rect",{x:bx-0.9,y:-7,width:1.8,height:5,rx:.9,fill:"var(--main)"}))); // 毛
+  brush.appendChild(el("rect",{x:-2,y:3,width:4,height:17,rx:2,fill:"var(--main)"})); // 柄
+  brush.style.opacity=0;
+  brush.style.transform="translate(110px,132px)"; // 初期は口の中央下で待機（初回スタート時の角からの飛来を防ぐ）
+  mouth.appendChild(brush);
+  function moveBrush(zoneIdx){
+    const zc=zoneCenter[zoneIdx]; if(!zc) return;
+    const x=zc.sx/zc.n, y=zc.sy/zc.n;
+    brush.style.opacity=1;
+    brush.style.transform=`translate(${x.toFixed(1)}px,${(y+8).toFixed(1)}px)`;
+  }
+
+  // ── 要素 ──
+  const R=120, CIRC=2*Math.PI*R, ring=document.getElementById("ring");
+  ring.style.strokeDasharray=CIRC;
+  const $time=document.getElementById("time"), $zoneName=document.getElementById("zoneName"),
+        $zoneAdvice=document.getElementById("zoneAdvice"), $startBtn=document.getElementById("startBtn"),
+        $resetBtn=document.getElementById("resetBtn"), $doneMsg=document.getElementById("doneMsg"),
+        $dots=document.getElementById("dots");
+
+  ZONES.forEach(()=>{const d=document.createElement("div");d.className="dot";$dots.appendChild(d);});
+  const dots=[...document.querySelectorAll(".dot")];
+
+  let startTs=0, elapsed=0, timer=null, running=false, lastZone=-1;
+  function fmt(sec){return Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0");}
+
+  // ── 音（外部ファイル不要・軽量）──
+  let audioCtx=null;
+  function beep(freq=660,dur=.18){
+    try{ audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+      const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+      o.type="sine";o.frequency.value=freq;o.connect(g);g.connect(audioCtx.destination);
+      g.gain.setValueAtTime(.001,audioCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(.25,audioCtx.currentTime+.02);
+      g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+dur);
+      o.start();o.stop(audioCtx.currentTime+dur);
+    }catch(e){}
+  }
+
+  function highlightZone(idx){ teeth.forEach(t=>t.el.classList.toggle("on",t.zone===idx)); }
+
+  function render(){
+    $time.textContent=fmt(TOTAL-elapsed);
+    ring.style.strokeDashoffset=CIRC*(elapsed/TOTAL);
+    const zoneIdx=Math.min(ZONES.length-1,Math.floor(elapsed/SECONDS_PER_ZONE));
+    if(zoneIdx!==lastZone){
+      const z=ZONES[zoneIdx];
+      $zoneName.textContent=z.name; $zoneAdvice.textContent=z.advice;
+      highlightZone(zoneIdx);
+      dots.forEach((d,i)=>{d.classList.toggle("active",i===zoneIdx);d.classList.toggle("done",i<zoneIdx);});
+      if(running){ beep(720); moveBrush(zoneIdx); }
+      lastZone=zoneIdx;
+    }
+  }
+
+  // 時計基準：一瞬詰まっても時間がズレない・止まらない
+  function tick(){
+    elapsed=Math.min(TOTAL,Math.floor((Date.now()-startTs)/1000));
+    if(elapsed>=TOTAL){elapsed=TOTAL;render();finish();return;}
+    render();
+  }
+
+  function start(){
+    if(running){ clearInterval(timer); running=false; $startBtn.textContent="つづける"; return; }
+    if(elapsed>=TOTAL) reset();
+    running=true; $startBtn.textContent="いちじ ていし"; $doneMsg.textContent="";
+    startTs=Date.now()-elapsed*1000; lastZone=-1;
+    render(); // ← render() が現在のゾーンへブラシ移動＋音を出す（moveBrush(0)の無条件上書きバグを修正）
+    timer=setInterval(tick,1000);
+  }
+
+  function finish(){
+    clearInterval(timer); running=false; $startBtn.textContent="もう いっかい";
+    $zoneName.textContent="ぴかぴか！"; $zoneAdvice.textContent="よく がんばったね";
+    teeth.forEach(t=>t.el.classList.add("on"));
+    dots.forEach(d=>{d.classList.remove("active");d.classList.add("done");});
+    $doneMsg.textContent="🎉 2ふんかん おつかれさま！";
+    [523,659,784,1047].forEach((f,i)=>setTimeout(()=>beep(f,.22),i*160));
+    confetti();
+  }
+
+  function confetti(){
+    const colors=["#2bb3c0","#ff9aa2","#ffd66b","#8ad6c0","#a0c4ff"];
+    for(let i=0;i<30;i++){
+      const c=document.createElement("div");c.className="confetti";
+      c.style.left=Math.random()*100+"vw";
+      c.style.background=colors[Math.floor(Math.random()*colors.length)];
+      c.style.animationDuration=(1.8+Math.random()*1.4)+"s";
+      c.style.animationDelay=Math.random()*.4+"s";
+      document.body.appendChild(c);setTimeout(()=>c.remove(),3600);
+    }
+  }
+
+  function reset(){
+    clearInterval(timer); running=false; elapsed=0; lastZone=-1;
+    $startBtn.textContent="スタート"; $doneMsg.textContent="";
+    $zoneName.textContent="スタートを おしてね";
+    $zoneAdvice.textContent="まえば・おくば・かむところ　みんな ぴかぴかに！";
+    highlightZone(-1);
+    brush.style.opacity=0; brush.style.transform="translate(110px,132px)";
+    dots.forEach(d=>d.classList.remove("active","done"));
+    $time.textContent=fmt(TOTAL); ring.style.strokeDashoffset=0;
+  }
+
+  $startBtn.addEventListener("click",start);
+  $resetBtn.addEventListener("click",reset);
+  reset();
+</script>
+</body>
+</html>
