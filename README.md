@@ -5,3 +5,10 @@
 
 お子さまがお使いになる際は、保護者の方の見守りのもとでご使用ください。
 本ツールは診断・治療判断を行うものではなく、一般的な歯みがき習慣のサポートを目的としています。
+
+## 使ってみる
+👉 https://dental-r.github.io/kodomo-hamigaki-timer/
+
+## 紹介記事
+- [開発ストーリー：プログラミング経験ゼロの歯科医師が、AIと一緒に院内ツールを作ってみた話（note）](https://note.com/honest_shrew1134/n/n194068539056)
+- [姉妹ツール：治療計画書ツール（無料版）の紹介（note）](https://note.com/honest_shrew1134/n/n12cdaf0a3bfa)
